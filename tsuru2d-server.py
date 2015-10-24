@@ -66,37 +66,54 @@ class SATool(cherrypy.Tool):
 class User(Base):
     __tablename__ = "users"
     id = sqlalchemy.Column(sqlalchemy.Integer, primary_key=True)
-    email = sqlalchemy.Column(sqlalchemy.Text, unique=True)
-    password_hash = sqlalchemy.Column(sqlalchemy.Text)
-    password_salt = sqlalchemy.Column(sqlalchemy.Text)
+    email = sqlalchemy.Column(sqlalchemy.Text, unique=True, nullable=False)
+    password_hash = sqlalchemy.Column(sqlalchemy.Text, nullable=False)
+    password_salt = sqlalchemy.Column(sqlalchemy.Text, nullable=False)
 
 
 class AuthToken(Base):
     __tablename__ = "auth_tokens"
     id = sqlalchemy.Column(sqlalchemy.Integer, primary_key=True)
-    user_id = sqlalchemy.Column(sqlalchemy.Integer, sqlalchemy.ForeignKey("users.id"))
-    value = sqlalchemy.Column(sqlalchemy.Text, unique=True)
-    expiration_time = sqlalchemy.Column(sqlalchemy.String(32))
+    user_id = sqlalchemy.Column(sqlalchemy.Integer, sqlalchemy.ForeignKey("users.id"), nullable=False)
+    value = sqlalchemy.Column(sqlalchemy.String(32), unique=True, nullable=False)
+    expiration_time = sqlalchemy.Column(sqlalchemy.Integer, nullable=False)
 
 
 class Game(Base):
     __tablename__ = "games"
     id = sqlalchemy.Column(sqlalchemy.Integer, primary_key=True)
-    package_name = sqlalchemy.Column(sqlalchemy.Text)
+    package_name = sqlalchemy.Column(sqlalchemy.Text, nullable=False)
 
 
-class GameSave(Base):
-    __tablename__ = "game_saves"
+class SaveData(Base):
+    __tablename__ = "save_data"
+    __table_args__ = (sqlalchemy.UniqueConstraint("user_id", "game_id", "save_index"),)
     id = sqlalchemy.Column(sqlalchemy.Integer, primary_key=True)
-    user_id = sqlalchemy.Column(sqlalchemy.Integer, sqlalchemy.ForeignKey("users.id"))
-    game_id = sqlalchemy.Column(sqlalchemy.Integer, sqlalchemy.ForeignKey("games.id"))
-    json_data = sqlalchemy.Column(sqlalchemy.Text)
+    user_id = sqlalchemy.Column(sqlalchemy.Integer, sqlalchemy.ForeignKey("users.id"), nullable=False)
+    game_id = sqlalchemy.Column(sqlalchemy.Integer, sqlalchemy.ForeignKey("games.id"), nullable=False)
+    save_index = sqlalchemy.Column(sqlalchemy.Integer, nullable=False)
+    save_version = sqlalchemy.Column(sqlalchemy.Integer, nullable=False)
+    save_time = sqlalchemy.Column(sqlalchemy.Integer, nullable=False)
+    scene_id = sqlalchemy.Column(sqlalchemy.String, nullable=False)
+    frame_id = sqlalchemy.Column(sqlalchemy.String, nullable=False)
+    custom_state = sqlalchemy.Column(sqlalchemy.Text, nullable=False)
 
 
 def generate_auth_token():
     token_value = uuid.uuid4().hex
     expiration_time = int(time.time() * 1000) + TOKEN_EXPIRATION_TIME_DAYS * 24 * 60 * 60 * 1000
     return (token_value, expiration_time)
+
+
+def validate_auth_token(db_session, token_value):
+    if not token_value:
+        return (False, "invalid_auth_token")
+    auth_token = db_session.query(AuthToken).filter(AuthToken.value == token_value).first()
+    if not auth_token:
+        return (False, "invalid_auth_token")
+    if int(auth_token.expiration_time) < int(time.time() * 1000):
+        return (False, "auth_token_expired")
+    return (True, auth_token.user_id)
 
 
 def json_error(msg):
@@ -125,8 +142,14 @@ class Server:
         password_hash =  crypt.crypt(password, password_salt)
         user = User(email=email, password_hash=password_hash, password_salt=password_salt)
         cherrypy.request.db.add(user)
+        cherrypy.request.db.flush()
+        cherrypy.request.db.refresh(user)
+        token_value, expiration_time = generate_auth_token()
+        auth_token = AuthToken(user_id=user.id, value=token_value, expiration_time=expiration_time)
+        cherrypy.request.db.add(auth_token)
         return {
-            "success": True
+            "success": True,
+            "auth_token": token_value
         }
 
     @cherrypy.tools.json_in()
@@ -154,23 +177,104 @@ class Server:
     @cherrypy.tools.json_in()
     @cherrypy.tools.json_out()
     @cherrypy.expose
+    def create_game(self):
+        json = cherrypy.request.json
+        game_package = json.get("game_package")
+        if not game_package:
+            return json_error("invalid_game_package")
+        game_check = cherrypy.request.db.query(Game).filter(Game.package_name == game_package).first()
+        if game_check:
+            return json_error("game_already_exists")
+        game = Game(package_name=game_package)
+        cherrypy.request.db.add(game)
+        return {
+            "success": True
+        }
+
+    @cherrypy.tools.json_in()
+    @cherrypy.tools.json_out()
+    @cherrypy.expose
     def write_save(self):
         json = cherrypy.request.json
         token_value = json.get("auth_token")
-        save_data_str = json.get("save_data")
-        if not token_value:
-            return json_error("invalid_auth_token")
-        auth_token = cherrypy.request.db.query(AuthToken).filter(AuthToken.value == token_value).first()
-        if not auth_token:
-            return json_error("invalid_auth_token")
-        if int(auth_token.expiration_time) < int(time.time() * 1000):
-            return json_error("auth_token_expired")
-        if not save_data_str:
-            return json_error("invalid_save_data")
-        save_data = GameSave(user_id=auth_token.user_id, game_id="com.test.game", json_data=save_data_str)
+        auth_success, ret = validate_auth_token(cherrypy.request.db, token_value)
+        if not auth_success:
+            return json_error(ret)
+        user_id = ret
+        game_package = json.get("game_package")
+        game = cherrypy.request.db.query(Game).filter(Game.package_name == game_package).first()
+        if not game:
+            return json_error("invalid_game_package")
+        game_id = game.id
+        save_data = SaveData(
+            user_id=user_id,
+            game_id=game_id,
+            save_index=json.get("index"),
+            save_version=json.get("version"),
+            save_time=json.get("time"),
+            scene_id=json.get("scene_id"),
+            frame_id=json.get("frame_id"),
+            custom_state=json.get("custom_state"))
         cherrypy.request.db.add(save_data)
+        cherrypy.request.db.flush()
+        cherrypy.request.db.refresh(save_data)
+        return {
+            "success": True,
+            "save_id": save_data.id
+        }
+
+    @cherrypy.tools.json_in()
+    @cherrypy.tools.json_out()
+    @cherrypy.expose
+    def delete_save(self):
+        json = cherrypy.request.json
+        token_value = json.get("auth_token")
+        auth_success, ret = validate_auth_token(cherrypy.request.db, token_value)
+        if not auth_success:
+            return json_error(ret)
+        user_id = ret
+        save_id = json.get("save_id")
+        if not save_id:
+            return json_error("invalid_save_id")
+        delete_count = cherrypy.request.db.query(SaveData)\
+            .filter(SaveData.id == save_id, SaveData.user_id == user_id)\
+            .delete()
+        if delete_count == 0:
+            return json_error("delete_failed")
         return {
             "success": True
+        }
+
+    @cherrypy.tools.json_in()
+    @cherrypy.tools.json_out()
+    @cherrypy.expose
+    def enumerate_saves(self):
+        json = cherrypy.request.json
+        token_value = json.get("auth_token")
+        auth_success, ret = validate_auth_token(cherrypy.request.db, token_value)
+        if not auth_success:
+            return json_error(ret)
+        user_id = ret
+        game_package = json.get("game_package")
+        if not game_package:
+            return json_error("invalid_game_package")
+        game = cherrypy.request.db.query(Game).filter(Game.package_name == game_package).first()
+        if not game:
+            return json_error("invalid_game_package")
+        game_id = game.id
+        query = cherrypy.request.db.query(SaveData).filter(SaveData.game_id == game_id, SaveData.user_id == user_id)
+        saves = [{
+            "save_id": s.id,
+            "index": s.save_index,
+            "version": s.save_version,
+            "time": s.save_time,
+            "scene_id": s.scene_id,
+            "frame_id": s.frame_id,
+            "custom_state": s.custom_state
+        } for s in query]
+        return {
+            "success": True,
+            "saves": saves
         }
 
 
