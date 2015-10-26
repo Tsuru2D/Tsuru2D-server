@@ -1,6 +1,6 @@
 # Tsuru2D
 
-This is the server backend to the [Tsuru2D engine](https://github.com/Tsuru2D/Tsuru2D-engine).
+This is the server backend for the [Tsuru2D engine](https://github.com/Tsuru2D/Tsuru2D-engine).
 
 ## /create_user
 ```
@@ -11,7 +11,7 @@ Input: {
 
 Output: {
     "success": true,
-    "auth_token": "f4341f0091fb4f809300fbf13411edc4"
+    "auth_token": "83d2867b60ee4eeb86c24214f734bce5"
 }
 ```
 
@@ -25,6 +25,17 @@ Input: {
 Output: {
     "success": true,
     "auth_token": "83d2867b60ee4eeb86c24214f734bce5"
+}
+```
+
+## /logout
+```
+Input: {
+    "auth_token": "83d2867b60ee4eeb86c24214f734bce5"
+}
+
+Output: {
+    "success": true
 }
 ```
 
@@ -44,6 +55,7 @@ Output: {
 Input: {
     "auth_token": "83d2867b60ee4eeb86c24214f734bce5",
     "game_package": "com.example.mygame",
+    "overwrite": true,
     "index": 1,
     "version": 1,
     "time", 1445706098,
@@ -76,7 +88,9 @@ Output: {
 ```
 Input: {
     "auth_token": "83d2867b60ee4eeb86c24214f734bce5",
-    "game_package": "com.example.mygame"
+    "game_package": "com.example.mygame",
+    "from_index": 1,
+    "to_index": 20
 }
 
 Output: {
