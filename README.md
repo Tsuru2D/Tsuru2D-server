@@ -67,7 +67,7 @@ Input: {
     "overwrite": true,
     "index": 1,
     "version": 1,
-    "time", 1445706098,
+    "time": 1445706098,
     "scene_id": "R.scene.scene1",
     "frame_id": "frame1",
     "custom_state": {
@@ -106,10 +106,10 @@ Output: {
     "success": true,
     "saves": [
         {
-            "save_id": 123
+            "save_id": 123,
             "index": 1,
             "version": 1,
-            "time", 1445706098,
+            "time": 1445706098,
             "scene_id": "R.scene.scene1",
             "frame_id": "frame1",
             "custom_state": {
