@@ -2,7 +2,16 @@
 
 This is the server backend for the [Tsuru2D engine](https://github.com/Tsuru2D/Tsuru2D-engine).
 
-## /create_user
+## Dependencies
+
+- Python 3
+- [cherrypy](http://www.cherrypy.org/)
+- [passlib](https://pythonhosted.org/passlib/)
+- [sqlalchemy](http://www.sqlalchemy.org/)
+
+## JSON API
+
+### /create_user
 ```
 Input: {
     "email": "bob@example.com",
@@ -15,7 +24,7 @@ Output: {
 }
 ```
 
-## /login
+### /login
 ```
 Input: {
     "email": "bob@example.com",
@@ -28,7 +37,7 @@ Output: {
 }
 ```
 
-## /logout
+### /logout
 ```
 Input: {
     "auth_token": "83d2867b60ee4eeb86c24214f734bce5"
@@ -39,7 +48,7 @@ Output: {
 }
 ```
 
-## /create_game
+### /create_game
 ```
 Input: {
     "game_package": "com.example.mygame"
@@ -50,7 +59,7 @@ Output: {
 }
 ```
 
-## /write_save
+### /write_save
 ```
 Input: {
     "auth_token": "83d2867b60ee4eeb86c24214f734bce5",
@@ -72,7 +81,7 @@ Output: {
 }
 ```
 
-## /delete_save
+### /delete_save
 ```
 Input: {
     "auth_token": "83d2867b60ee4eeb86c24214f734bce5",
@@ -84,7 +93,7 @@ Output: {
 }
 ```
 
-## /enumerate_saves
+### /enumerate_saves
 ```
 Input: {
     "auth_token": "83d2867b60ee4eeb86c24214f734bce5",

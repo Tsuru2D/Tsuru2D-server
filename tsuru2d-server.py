@@ -194,6 +194,13 @@ def update_save_data(request_json, save_data):
     save_data.custom_state = json.dumps(request_json.get("custom_state"))
 
 
+def json_success(data=None):
+    if not data:
+        data = {}
+    data["success"] = True
+    return data
+
+
 def json_error(msg):
     return {
         "success": False,
@@ -224,10 +231,9 @@ class Server:
             return json_error("user_already_exists")
         session.refresh(user)
         token_value = generate_auth_token(session, user.id)
-        return {
-            "success": True,
+        return json_success({
             "auth_token": token_value
-        }
+        })
 
     @cherrypy.tools.json_in()
     @cherrypy.tools.json_out()
@@ -243,10 +249,9 @@ class Server:
         if not verify_password(password, user.password_hash):
             return json_error("incorrect_password")
         token_value = generate_auth_token(session, user.id)
-        return {
-            "success": True,
+        return json_success({
             "auth_token": token_value
-        }
+        })
 
     @cherrypy.tools.json_in()
     @cherrypy.tools.json_out()
@@ -262,9 +267,7 @@ class Server:
             .delete()
         if delete_count == 0:
             return json_error("invalid_auth_token")
-        return {
-            "success": True
-        }
+        return json_success()
 
     @cherrypy.tools.json_in()
     @cherrypy.tools.json_out()
@@ -282,9 +285,7 @@ class Server:
         except sqlalchemy.exc.IntegrityError as e:
             session.rollback()
             return json_error("game_already_exists")
-        return {
-            "success": True
-        }
+        return json_success()
 
     @cherrypy.tools.json_in()
     @cherrypy.tools.json_out()
@@ -314,10 +315,9 @@ class Server:
             session.add(save_data)
         session.flush()
         session.refresh(save_data)
-        return {
-            "success": True,
+        return json_success({
             "save_id": save_data.id
-        }
+        })
 
     @cherrypy.tools.json_in()
     @cherrypy.tools.json_out()
@@ -340,9 +340,7 @@ class Server:
             # TODO: Make this error more clear
             # (permission denied, save doesn't exist, etc)
             return json_error("delete_failed")
-        return {
-            "success": True
-        }
+        return json_success()
 
     @cherrypy.tools.json_in()
     @cherrypy.tools.json_out()
@@ -369,10 +367,9 @@ class Server:
         if to_index:
             query = query.filter(SaveData.save_index <= to_index)
         saves = [save_data_to_json(save_data) for save_data in query]
-        return {
-            "success": True,
+        return json_success({
             "saves": saves
-        }
+        })
 
 
 if __name__ == "__main__":
