@@ -99,11 +99,28 @@ class SaveData(Base):
     custom_state = sqlalchemy.Column(sqlalchemy.Text, nullable=False)
 
 
+class GameSettings(Base):
+    __tablename__ = "game_settings"
+    __table_args__ = (sqlalchemy.UniqueConstraint("user_id", "game_id"),)
+    id = sqlalchemy.Column(sqlalchemy.Integer, primary_key=True)
+    user_id = sqlalchemy.Column(sqlalchemy.Integer, sqlalchemy.ForeignKey("users.id"), nullable=False)
+    game_id = sqlalchemy.Column(sqlalchemy.Integer, sqlalchemy.ForeignKey("games.id"), nullable=False)
+    settings_table = sqlalchemy.Column(sqlalchemy.Text, nullable=False)
+
+
 def get_user_by_email(db_session, email):
     if not email:
         return None
     return db_session.query(User)\
         .filter(User.email == email)\
+        .first()
+
+
+def get_game_by_package(db_session, package_name):
+    if not package_name:
+        return None
+    return db_session.query(Game)\
+        .filter(Game.package_name == package_name)\
         .first()
 
 
@@ -116,11 +133,11 @@ def get_save_data(db_session, user_id, game_id, save_index):
         .first()
 
 
-def get_game_by_package(db_session, package_name):
-    if not package_name:
-        return None
-    return db_session.query(Game)\
-        .filter(Game.package_name == package_name)\
+def get_game_settings(db_session, user_id, game_id):
+    return db_session.query(GameSettings)\
+        .filter(
+            GameSettings.user_id == user_id,
+            GameSettings.game_id == game_id)\
         .first()
 
 
@@ -150,6 +167,20 @@ def validate_auth_token(db_session, token_value):
     if auth_token.expiration_time < current_unix_time():
         return (False, "auth_token_expired")
     return (True, auth_token.user_id)
+
+
+def get_user_game_ids(db_session, request_json):
+    token_value = request_json.get("auth_token")
+    auth_success, ret = validate_auth_token(db_session, token_value)
+    if not auth_success:
+        return (False, ret)
+    user_id = ret
+    game_package = request_json.get("game_package")
+    game = get_game_by_package(db_session, game_package)
+    if not game:
+        return (False, "invalid_game_package")
+    game_id = game.id
+    return (True, (user_id, game_id))
 
 
 def hash_password(password_plaintext):
@@ -293,16 +324,10 @@ class Server:
     def write_save(self):
         request_json = cherrypy.request.json
         session = cherrypy.request.db
-        token_value = request_json.get("auth_token")
-        auth_success, ret = validate_auth_token(session, token_value)
+        auth_success, ret = get_user_game_ids(session, request_json)
         if not auth_success:
             return json_error(ret)
-        user_id = ret
-        game_package = request_json.get("game_package")
-        game = get_game_by_package(session, game_package)
-        if not game:
-            return json_error("invalid_game_package")
-        game_id = game.id
+        user_id, game_id = ret
         save_index = request_json.get("index")
         overwrite = request_json.get("overwrite", False)
         save_data = get_save_data(session, user_id, game_id, save_index)
@@ -348,16 +373,10 @@ class Server:
     def enumerate_saves(self):
         request_json = cherrypy.request.json
         session = cherrypy.request.db
-        token_value = request_json.get("auth_token")
-        auth_success, ret = validate_auth_token(session, token_value)
+        auth_success, ret = get_user_game_ids(session, request_json)
         if not auth_success:
             return json_error(ret)
-        user_id = ret
-        game_package = request_json.get("game_package")
-        game = get_game_by_package(session, game_package)
-        if not game:
-            return json_error("invalid_game_package")
-        game_id = game.id
+        user_id, game_id = ret
         from_index = request_json.get("from_index")
         to_index = request_json.get("to_index")
         query = session.query(SaveData)\
@@ -370,6 +389,50 @@ class Server:
         return json_success({
             "saves": saves
         })
+
+    @cherrypy.tools.json_in()
+    @cherrypy.tools.json_out()
+    @cherrypy.expose
+    def read_game_settings(self):
+        request_json = cherrypy.request.json
+        session = cherrypy.request.db
+        auth_success, ret = get_user_game_ids(session, request_json)
+        if not auth_success:
+            return json_error(ret)
+        user_id, game_id = ret
+        game_settings = get_game_settings(session, user_id, game_id)
+        settings_table = {}
+        if game_settings:
+            settings_table = json.loads(game_settings.settings_table)
+        return json_success({
+            "settings": settings_table
+        })
+
+
+    @cherrypy.tools.json_in()
+    @cherrypy.tools.json_out()
+    @cherrypy.expose
+    def write_game_settings(self):
+        request_json = cherrypy.request.json
+        session = cherrypy.request.db
+        auth_success, ret = get_user_game_ids(session, request_json)
+        if not auth_success:
+            return json_error(ret)
+        user_id, game_id = ret
+        settings_table = request_json.get("settings")
+        if settings_table is None:
+            return json_error("invalid_game_settings")
+        settings_str = json.dumps(settings_table)
+        game_settings = get_game_settings(session, user_id, game_id)
+        if not game_settings:
+            game_settings = GameSettings(
+                user_id=user_id,
+                game_id=game_id,
+                settings_table=settings_str)
+            session.add(game_settings)
+        else:
+            game_settings.settings_table = settings_str
+        return json_success()
 
 
 if __name__ == "__main__":

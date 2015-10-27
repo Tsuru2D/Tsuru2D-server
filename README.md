@@ -122,3 +122,33 @@ Output: {
     ]
 }
 ```
+
+### /read_game_settings
+```
+Input: {
+    "auth_token": "83d2867b60ee4eeb86c24214f734bce5",
+    "game_package": "com.example.mygame"
+}
+
+Output: {
+    "success": true,
+    "settings": {
+        ...
+    }
+}
+```
+
+### /write_game_settings
+```
+Input: {
+    "auth_token": "83d2867b60ee4eeb86c24214f734bce5",
+    "game_package": "com.example.mygame",
+    "settings": {
+        ...
+    }
+}
+
+Output: {
+    "success": true
+}
+```
