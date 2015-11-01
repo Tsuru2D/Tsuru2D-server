@@ -1,3 +1,4 @@
 CherryPy==3.8.0
 passlib==1.6.5
 SQLAlchemy==1.0.9
+psycopg2==2.6.1
