@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import json
+import os
 import time
 import uuid
 
@@ -9,22 +10,22 @@ import sqlalchemy
 import sqlalchemy.ext.declarative
 
 # ==========Config==========
-DATABASE_FILE = "tsuru2d.db"
+DATABASE_URI = os.environ["DATABASE_URL"]
+SERVER_PORT = int(os.environ["PORT"])
 API_PATH = "/apiv1"
-SERVER_PORT = 8080
 TOKEN_EXPIRATION_TIME = 14 * 24 * 60 * 60
 # ==========================
 
 
 class SAEnginePlugin(cherrypy.process.plugins.SimplePlugin):
-    def __init__(self, bus, db_path):
+    def __init__(self, bus, db_uri):
         super().__init__(bus)
         self.sa_engine = None
         self.bus.subscribe("bind", self.bind)
-        self.db_path = db_path
+        self.db_uri = db_uri
 
     def start(self):
-        self.sa_engine = sqlalchemy.create_engine("sqlite:///" + self.db_path)
+        self.sa_engine = sqlalchemy.create_engine(self.db_uri)
         Base.metadata.create_all(self.sa_engine)
 
     def stop(self):
@@ -436,7 +437,7 @@ class Server:
 
 
 if __name__ == "__main__":
-    SAEnginePlugin(cherrypy.engine, DATABASE_FILE).subscribe()
+    SAEnginePlugin(cherrypy.engine, DATABASE_URI).subscribe()
     cherrypy.tools.db = SATool()
     cherrypy.tree.mount(Server(), API_PATH)
     cherrypy.config.update({
